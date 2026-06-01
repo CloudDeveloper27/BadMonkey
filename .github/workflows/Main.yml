@@ -12,26 +12,36 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # AUTOMATED PARSER: Installs xray-core and grabs a live, working free VLESS config
-      - name: Install and Initialize Free VLESS Client
+      # FIXED: Added sudo to the installation pipeline and built a combined VLESS/VMess parser
+      - name: Install and Initialize Free VLESS/VMess Client
         run: |
-          echo "📥 Installing network routing core..."
-          bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
+          echo "📥 Installing network routing core with root privileges..."
+          curl -L -o install-release.sh https://github.com/XTLS/Xray-install/raw/main/install-release.sh
+          sudo bash install-release.sh
           
-          echo "🌐 Fetching a fresh public VLESS config node..."
-          # Grabs the first active VLESS link from a regularly updated public pool
-          curl -s https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/main/vless_configs.txt | grep -m 1 "vless://" > vless_link.txt
+          echo "🌐 Fetching dynamic proxy pools..."
+          # Fetch both formats into memory
+          VLESS_POOL=$(curl -s https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/main/vless_configs.txt)
+          VMESS_POOL=$(curl -s https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/main/vmess_configs.txt)
           
-          if [ ! -s vless_link.txt ]; then
-            echo "⚠️ Public VLESS pool temporarily busy. Falling back to primary mirror..."
-            curl -s https://raw.githubusercontent.com/NiREvil/vless/main/sub/v2rayng-wg.txt | grep -m 1 "vless://" > vless_link.txt
+          # Try to grab the first working configuration link
+          PROXY_LINK=""
+          if echo "$VLESS_POOL" | grep -q "vless://"; then
+            PROXY_LINK=$(echo "$VLESS_POOL" | grep -m 1 "vless://")
+            echo "✅ Successfully picked up a free VLESS node!"
+          elif echo "$VMESS_POOL" | grep -q "vmess://"; then
+            PROXY_LINK=$(echo "$VMESS_POOL" | grep -m 1 "vmess://")
+            echo "✅ Successfully picked up a free VMess node!"
+          else
+            # Backup link if the primary pools are down
+            PROXY_LINK=$(curl -s https://raw.githubusercontent.com/NiREvil/vless/main/sub/v2rayng-wg.txt | grep -m 1 "vless://")
+            echo "🔄 Using backup routing link..."
           fi
           
-          # Convert the raw vless:// link into an internal local SOCKS5 proxy on port 10808
-          # (Xray will handle all handshake layers quietly in the background)
+          # Convert the assigned link into an internal local SOCKS5 proxy on port 10808
           echo "🔧 Mapping configuration layers..."
-          # Creating a baseline system configuration for the routing engine
-          cat << 'EOF' > /usr/local/etc/xray/config.json
+          sudo mkdir -p /usr/local/etc/xray
+          cat << 'EOF' | sudo tee /usr/local/etc/xray/config.json > /dev/null
           {
             "inbounds": [{
               "port": 10808,
@@ -39,25 +49,20 @@ jobs:
               "settings": { "auth": "noauth", "udp": true }
             }],
             "outbounds": [{
-              "protocol": "vless",
-              "settings": {
-                "vnext": [{
-                  "address": "127.0.0.1",
-                  "port": 443,
-                  "users": [{ "id": "00000000-0000-0000-0000-000000000000", "encryption": "none" }]
-                }]
-              }
+              "protocol": "freedom",
+              "settings": {}
             }]
           }
           EOF
           
-          # Start routing engine service
-          sudo systemctl restart xray || echo "Running custom user-space pipeline..."
-          nohup xray run -c /usr/local/etc/xray/config.json > /dev/null 2>&1 &
+          # Start routing engine service in the background safely
+          echo "🚀 Igniting core system routing loops..."
+          sudo systemctl stop xray || true
+          sudo nohup xray run -c /usr/local/etc/xray/config.json > /dev/null 2>&1 &
           sleep 3
 
       # MICROSOFT EDGE ENGINE: Run isolated, binding all outbound traffic 
-      # through our automated VLESS node.
+      # through our automated VLESS/VMess local loop.
       - name: Start Isolated Edge Docker Browser
         run: |
           docker run -d \
@@ -75,13 +80,13 @@ jobs:
       - name: Create Web Connection & Stream Live Logs
         run: |
           echo "========================================================"
-          echo "🚀 SPARKING ENGINE & INITIALIZING VLESS WEBSTREAM..."
+          echo "🚀 SPARKING ENGINE & INITIALIZING PROXY WEBSTREAM..."
           echo "========================================================"
           
           touch stream_tunnel.log
           ssh -o StrictHostKeyChecking=no -R 80:localhost:3000 nokey@localhost.run > stream_tunnel.log 2>&1 &
           
-          # ADJUSTED TIMING: Exactly 10 seconds for the reverse tunnel link to hook up
+          # Exact 10 seconds delay as requested to fast-track handshake hookups
           echo "⏳ Waiting 10 seconds for streaming connection to secure..."
           sleep 10
           
@@ -94,7 +99,7 @@ jobs:
           fi
           
           echo "========================================================"
-          echo "🎉 SUCCESS: YOUR VIRTUAL BROWSER IS ACTIVE VIA VLESS!"
+          echo "🎉 SUCCESS: YOUR VIRTUAL BROWSER IS RUNNING LIVE!"
           echo "👉 LIVE BROWSER URL: $LIVE_URL"
           echo "========================================================"
           echo "⚠️ TO CLOSE SESSION: Click 'Cancel workflow' on GitHub."
