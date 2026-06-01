@@ -22,8 +22,8 @@ jobs:
           echo -e "\n========================================================"
 
       # CHROMIUM ENGINE CONFIGURATION:
-      # Runs the reliable Chromium base container on port 3000
-      # with your requested Chromebook user-agent profile.
+      # We inject the Chromebook user-agent safely using the standard container variable
+      # so it doesn't crash the internal Docker initialization scripts.
       - name: Start Isolated Chromium Docker Browser
         run: |
           docker run -d \
@@ -33,11 +33,11 @@ jobs:
             -e PUID=1000 \
             -e PGID=1000 \
             -e TZ=Asia/Kolkata \
+            -e CHROMIUM_FLAGS="--user-agent='Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'" \
             -p 3000:3000 \
-            lscr.io/linuxserver/chromium:latest \
-            --user-agent="Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            lscr.io/linuxserver/chromium:latest
 
-      # CLOUDFLARE ENGINE: Installs and flashes a live free quick tunnel to bypass the localhost.run bug
+      # CLOUDFLARE ENGINE: Installs and flashes a live free quick tunnel
       - name: Install and Initialize Cloudflare Tunnel
         run: |
           echo "📥 Setting up secure Cloudflare networking components..."
