@@ -22,8 +22,8 @@ jobs:
           echo -e "\n========================================================"
 
       # CHROMIUM ENGINE CONFIGURATION:
-      # Restored to the working Chromium base image on port 3000, 
-      # combined with the Chromebook user-agent profile identity.
+      # Runs the reliable Chromium base container on port 3000
+      # with your requested Chromebook user-agent profile.
       - name: Start Isolated Chromium Docker Browser
         run: |
           docker run -d \
@@ -37,28 +37,34 @@ jobs:
             lscr.io/linuxserver/chromium:latest \
             --user-agent="Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-      # EXPOSES TUNNEL & HOLDS RUNNER SECURELY FOR 6 HOURS USING LOCALHOST.RUN (LHR.LIFE)
+      # CLOUDFLARE ENGINE: Installs and flashes a live free quick tunnel to bypass the localhost.run bug
+      - name: Install and Initialize Cloudflare Tunnel
+        run: |
+          echo "📥 Setting up secure Cloudflare networking components..."
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          
+          touch cloudflare_tunnel.log
+          # Start a free, zero-config quick tunnel pointing directly to the browser port
+          cloudflared tunnel --url http://localhost:3000 > cloudflare_tunnel.log 2>&1 &
+
+      # CAPTURES URL LINK & STABILIZATION DELAY
       - name: Create Web Connection
         run: |
           echo "========================================================"
-          echo "🚀 SPARKING ENGINE & INITIALIZING WEBSTREAM VIA LOCALHOST.RUN..."
+          echo "🚀 SPARKING ENGINE & INITIALIZING WEBSTREAM VIA CLOUDFLARE..."
           echo "========================================================"
           
-          touch stream_tunnel.log
-          
-          # Establish background tunnel connection parameters via your original localhost.run setup
-          ssh -o StrictHostKeyChecking=no -R 80:localhost:3000 nokey@localhost.run > stream_tunnel.log 2>&1 &
-          
-          # Exactly 10 seconds to handshake before pulling the url link
+          # Exactly 10 seconds to let Cloudflare generate your clean live web link
           echo "⏳ Waiting 10 seconds for streaming connection to secure..."
           sleep 10
           
-          # Extracts the newly generated lhr.life URL from the logs
-          LIVE_URL=$(grep -o 'https://[^ ]*\.lhr\.life' stream_tunnel.log | head -n 1)
+          # Extracts your custom, stable trycloudflare link
+          LIVE_URL=$(grep -o 'https://[^ ]*\.trycloudflare\.com' cloudflare_tunnel.log | head -n 1)
           
           if [ -z "$LIVE_URL" ]; then
-            echo "❌ Link creation paused. Connection log output:"
-            cat stream_tunnel.log
+            echo "❌ Cloudflare pipeline paused. Connection log output:"
+            cat cloudflare_tunnel.log
             exit 1
           fi
           
