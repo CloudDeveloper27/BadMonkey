@@ -1,0 +1,68 @@
+name: Nord WebBrowser
+
+on:
+  workflow_dispatch:
+
+jobs:
+  WebBrowser:
+    name: WebBrowser
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Inspect Runner Public IP & ISP Info
+        run: |
+          echo "🔍 TRACKING OUTBOUND TRAFFIC ENVIRONMENT IP..."
+          curl -s https://ipinfo.io/json
+
+      - name: Start Chromium Docker with NordVPN Extension
+        run: |
+          # Download NordVPN extension CRX from Chrome Web Store mirror
+          curl -L -o nordvpn.crx "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=120.0&x=id=fojgjlkfemgopbghfjkcnclgfdhjhnbc%26installsource=ondemand%26uc"
+
+          # Create extension directory
+          mkdir -p /tmp/nordvpn_ext
+          unzip nordvpn.crx -d /tmp/nordvpn_ext
+
+          # Run Chromium container with extension mounted
+          docker run -d \
+            --name=virtual-browser \
+            --ipc=host \
+            --shm-size="6gb" \
+            -e PUID=1000 \
+            -e PGID=1000 \
+            -e TZ=Asia/Kolkata \
+            -e CHROMIUM_FLAGS="--user-agent='Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' --load-extension=/config/extensions/nordvpn" \
+            -p 3000:3000 \
+            -v /tmp/nordvpn_ext:/config/extensions/nordvpn \
+            lscr.io/linuxserver/chromium:latest
+
+      - name: Install and Initialize Cloudflare Tunnel
+        run: |
+          echo "📥 Setting up secure Cloudflare networking components..."
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          
+          touch cloudflare_tunnel.log
+          cloudflared tunnel --url http://localhost:3000 > cloudflare_tunnel.log 2>&1 &
+
+      - name: Create Web Connection
+        run: |
+          echo "🚀 Initializing webstream via Cloudflare..."
+          sleep 10
+          
+          LIVE_URL=$(grep -o 'https://[^ ]*\.trycloudflare\.com' cloudflare_tunnel.log | head -n 1)
+          
+          if [ -z "$LIVE_URL" ]; then
+            echo "❌ Cloudflare pipeline paused. Connection log output:"
+            cat cloudflare_tunnel.log
+            exit 1
+          fi
+          
+          echo "🎉 Chromium browser with NordVPN extension running!"
+          echo "👉 LIVE BROWSER URL: $LIVE_URL"
+          
+          # Keep runner alive for 6 hours
+          sleep 21600
