@@ -1,0 +1,53 @@
+name: WebBrowser Temp
+
+on:
+  workflow_dispatch:
+
+jobs:
+  WebBrowser:
+    name: WebBrowser
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Inspect Runner Public IP & ISP Info
+        run: |
+          echo "========================================================"
+          echo "🔍 TRACKING OUTBOUND TRAFFIC ENVIRONMENT IP..."
+          echo "========================================================"
+          curl -s https://ipinfo.io/json
+          echo -e "\n========================================================"
+
+      - name: Start Isolated Chromium Docker Browser
+        run: |
+          docker run -d \
+            --name=virtual-browser \
+            --ipc=host \
+            --shm-size="6gb" \
+            -e PUID=1000 \
+            -e PGID=1000 \
+            -e TZ=Asia/Kolkata \
+            -e CHROMIUM_FLAGS="--user-agent='Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'" \
+            -p 3000:3000 \
+            lscr.io/linuxserver/chromium:latest
+
+      # LOCAL TUNNEL ENGINE: Installs and flashes a live free quick tunnel
+      - name: Install and Initialize LocalTunnel
+        run: |
+          echo "📥 Setting up LocalTunnel..."
+          npm install -g localtunnel
+
+          # Start tunnel in background
+          lt --port 3000 --subdomain webbrowserdemo > localtunnel.log 2>&1 &
+
+          sleep 5
+          echo "========================================================"
+          echo "🎉 DOCKER VIRTUAL CHROMIUM BROWSER WITH LOCALTUNNEL!"
+          echo "👉 LIVE BROWSER URL:"
+          grep -o 'https://[^ ]*' localtunnel.log | head -n 1
+          echo "========================================================"
+
+          # Keep runner alive for 6 hours
+          sleep 21600
