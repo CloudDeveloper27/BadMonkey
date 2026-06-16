@@ -9,9 +9,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       # IP CHECK: Prints the standard datacenter tracking parameters for your reference
       - name: Inspect Runner Public IP & ISP Info
         run: |
